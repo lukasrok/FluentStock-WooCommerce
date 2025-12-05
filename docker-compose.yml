@@ -61,7 +61,7 @@ services:
       - ./vendor/plugins:/var/www/html/vendor/plugins:ro
       - ./scripts:/bootstrap-scripts:ro
       - ./data:/var/www/html/data:ro
-    command: bash -lc "mkdir -p wp-content/upgrade && chmod 775 wp-content/upgrade; tr -d '\r' < /bootstrap-scripts/ensure-plugins.sh > /tmp/ensure-plugins.sh && bash /tmp/ensure-plugins.sh"
+    command: bash -lc "mkdir -p wp-content/upgrade && chmod 775 wp-content/upgrade; awk '{ sub(/\r$/, ""); print }' /bootstrap-scripts/ensure-plugins.sh > /tmp/ensure-plugins.sh && chmod +x /tmp/ensure-plugins.sh && /bin/bash -c /tmp/ensure-plugins.sh"
 
   wpcli:
     image: wordpress:cli

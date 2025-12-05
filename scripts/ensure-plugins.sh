@@ -53,53 +53,68 @@ if ! wp option get fs_bootstrap_urls_done >/dev/null 2>&1; then
   wp option update fs_bootstrap_urls_done 1 || true
 fi
 
-# Ensure WooCommerce is installed and active with retries (local-first deterministic)
-WC_BOOTSTRAP_DONE=$(wp option get fs_bootstrap_wc_done 2>/dev/null || echo "0")
-if [ "${WC_BOOTSTRAP_DONE}" = "1" ] && wp plugin is-active woocommerce >/dev/null 2>&1; then
-  echo "WooCommerce already active (bootstrap done)."
-else
-  echo "Ensuring WooCommerce is installed and active (local zip preferred)..."
-  max_attempts=10
+ensure_woocommerce() {
+  echo "Ensuring WooCommerce is installed and active (local-first deterministic)..."
+  mkdir -p wp-content/upgrade wp-content/plugins || true
+
+  # retry up to 30 minutes total
+  deadline=$(( $(date +%s) + 1800 ))
+  attempt=0
   delay=5
-  for attempt in $(seq 1 ${max_attempts}); do
+  while [ $(date +%s) -lt ${deadline} ]; do
+    attempt=$(( attempt + 1 ))
     if wp plugin is-active woocommerce >/dev/null 2>&1; then
-      echo "WooCommerce already active."
-      break
+      echo "WooCommerce active."
+      return 0
     fi
+
     if wp plugin is-installed woocommerce >/dev/null 2>&1; then
-      echo "Activating WooCommerce (attempt ${attempt}/${max_attempts})..."
+      echo "Activating WooCommerce (attempt ${attempt})..."
       if wp plugin activate woocommerce >/dev/null 2>&1; then
         echo "WooCommerce activated."
-        break
-      fi
-    else
-      echo "Installing WooCommerce (attempt ${attempt}/${max_attempts})..."
-      if [ -f "${LOCAL_WC_ZIP}" ]; then
-        echo "Using local zip: ${LOCAL_WC_ZIP}"
-        if wp plugin install "${LOCAL_WC_ZIP}" --activate --force >/dev/null 2>&1; then
-          echo "WooCommerce installed and activated from local zip."
-          break
-        fi
-        echo "Local zip install failed on attempt ${attempt}." >&2
-      elif [ "${ALLOW_NET}" = "1" ]; then
-        echo "Local zip not found; attempting network fallback (attempt ${attempt})."
-        if wp plugin install woocommerce --activate --force >/dev/null 2>&1; then
-          echo "WooCommerce installed and activated from network."
-          break
-        fi
+        return 0
       else
-        echo "Local zip missing at ${LOCAL_WC_ZIP}. Provide the file or set WC_ALLOW_NETWORK_FALLBACK=1." >&2
+        echo "Activation failed, cleaning any partial state and retrying..." >&2
+        rm -rf wp-content/plugins/woocommerce || true
       fi
     fi
+
+    echo "Installing WooCommerce (attempt ${attempt})..."
+    if [ -f "${LOCAL_WC_ZIP}" ]; then
+      echo "Using local zip: ${LOCAL_WC_ZIP}"
+      if wp plugin install "${LOCAL_WC_ZIP}" --activate --force >/dev/null 2>&1; then
+        echo "WooCommerce installed and activated from local zip."
+        return 0
+      fi
+      echo "Local zip install failed on attempt ${attempt}." >&2
+    elif [ "${ALLOW_NET}" = "1" ]; then
+      echo "Local zip not found; attempting network fallback (attempt ${attempt})."
+      if wp plugin install woocommerce --activate --force >/dev/null 2>&1; then
+        echo "WooCommerce installed and activated from network."
+        return 0
+      fi
+    else
+      echo "Local zip missing at ${LOCAL_WC_ZIP}. Provide the file or set WC_ALLOW_NETWORK_FALLBACK=1." >&2
+    fi
+
     echo "Attempt ${attempt} failed; retrying in ${delay}s..."
     sleep ${delay}
     delay=$(( delay * 2 )); if [ ${delay} -gt 60 ]; then delay=60; fi
   done
-  if ! wp plugin is-active woocommerce >/dev/null 2>&1; then
-    echo "ERROR: WooCommerce is not active after multiple attempts. Ensure local zip exists at ${LOCAL_WC_ZIP} or enable WC_ALLOW_NETWORK_FALLBACK=1." >&2
+
+  echo "ERROR: Timed out waiting for WooCommerce to be active." >&2
+  return 1
+}
+
+WC_BOOTSTRAP_DONE=$(wp option get fs_bootstrap_wc_done 2>/dev/null || echo "0")
+if [ "${WC_BOOTSTRAP_DONE}" = "1" ] && wp plugin is-active woocommerce >/dev/null 2>&1; then
+  echo "WooCommerce already active (bootstrap done)."
+else
+  if ensure_woocommerce; then
+    wp option update fs_bootstrap_wc_done 1 || true
+  else
     exit 1
   fi
-  wp option update fs_bootstrap_wc_done 1 || true
 fi
 
 wp cache flush || true
