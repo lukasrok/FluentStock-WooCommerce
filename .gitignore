@@ -1,0 +1,57 @@
+# OS/Editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Node/Composer (if used in theme/plugins)
+node_modules/
+# Ignore vendor by default, but keep the deterministic WooCommerce zip
+vendor/*
+!vendor/plugins/
+vendor/plugins/*
+!vendor/plugins/woocommerce.zip
+
+# WordPress runtime
+wp-content/cache/
+wp-content/upgrade/
+wp-content/debug.log
+
+# Plugins managed at runtime via WP-CLI
+wp-content/plugins/woocommerce/
+
+# Local env and credentials
+.env
+wp-config.php
+
+# Logs
+*.log
+# OS/Editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Node/Composer (if used in theme/plugins)
+node_modules/
+# Ignore vendor by default, but keep the deterministic WooCommerce zip
+vendor/*
+!vendor/plugins/
+vendor/plugins/*
+!vendor/plugins/woocommerce.zip
+
+# WordPress runtime
+# Keep uploads tracked so demo products/media ship with repo
+wp-content/cache/
+wp-content/upgrade/
+wp-content/debug.log
+
+# Plugins managed at runtime via WP-CLI
+wp-content/plugins/woocommerce/
+
+# Local env and credentials
+.env
+wp-config.php
+
+# Logs
+*.log

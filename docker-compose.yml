@@ -1,0 +1,89 @@
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${WORDPRESS_DB_NAME:-wordpress}
+      MYSQL_USER: ${WORDPRESS_DB_USER:-wordpress}
+      MYSQL_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wordpress}
+      MYSQL_ROOT_PASSWORD: ${WORDPRESS_DB_ROOT_PASSWORD:-root}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./data:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    image: wordpress:6.9-php8.3-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    environment:
+      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-db:3306}
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wordpress}
+      WORDPRESS_CONFIG_EXTRA: |
+        define('FS_METHOD','direct');
+        define('FS_CHMOD_DIR', 0755);
+        define('FS_CHMOD_FILE', 0644);
+        define('WP_DEBUG', true);
+        if (!defined('WP_HOME')) define('WP_HOME', getenv('WP_HOME') ?: 'http://localhost:8000');
+        if (!defined('WP_SITEURL')) define('WP_SITEURL', getenv('WP_SITEURL') ?: 'http://localhost:8000');
+        if (!defined('WP_ENVIRONMENT_TYPE')) define('WP_ENVIRONMENT_TYPE', 'development');
+    volumes:
+      - wp_data:/var/www/html
+      - ./wp-content/uploads:/var/www/html/wp-content/uploads
+
+  # One-shot bootstrap: waits for WP install, then installs/activates WooCommerce
+  bootstrap:
+    image: wordpress:cli
+    user: "33:33"
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+    working_dir: /var/www/html
+    environment:
+      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-db:3306}
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wordpress}
+    volumes:
+      - wp_data:/var/www/html
+      - ./vendor/plugins:/var/www/html/vendor/plugins:ro
+      - ./scripts:/bootstrap-scripts:ro
+      - ./data:/var/www/html/data:ro
+    command: bash -lc "mkdir -p wp-content/upgrade && chmod 775 wp-content/upgrade; cp /bootstrap-scripts/ensure-plugins.sh /tmp/ensure-plugins.sh && sed -i 's/\r$//' /tmp/ensure-plugins.sh && bash /tmp/ensure-plugins.sh"
+
+  wpcli:
+    image: wordpress:cli
+    user: "33:33"
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+    working_dir: /var/www/html
+    environment:
+      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST:-db:3306}
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wordpress}
+    volumes:
+      - wp_data:/var/www/html
+      - ./vendor/plugins:/var/www/html/vendor/plugins:ro
+      - ./data:/var/www/html/data:ro
+      - ./wp-content/uploads:/var/www/html/wp-content/uploads
+    command: bash -lc "tail -f /dev/null"
+
+volumes:
+  db_data:
+  wp_data:
