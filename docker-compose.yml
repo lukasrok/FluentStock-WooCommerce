@@ -61,7 +61,21 @@ services:
       - ./vendor/plugins:/var/www/html/vendor/plugins:ro
       - ./scripts:/bootstrap-scripts:ro
       - ./data:/var/www/html/data:ro
-    command: bash -lc "mkdir -p wp-content/upgrade && chmod 775 wp-content/upgrade; awk '{ sub(/\r$/, ""); print }' /bootstrap-scripts/ensure-plugins.sh > /tmp/ensure-plugins.sh && chmod +x /tmp/ensure-plugins.sh && /bin/bash -c /tmp/ensure-plugins.sh"
+    command: >
+      bash -c "
+        sleep 30 &&
+        cd /var/www/html &&
+        until [ -f wp-includes/version.php ]; do echo 'Waiting for WordPress core files...'; sleep 2; done &&
+        until wp db check --skip-ssl --quiet; do sleep 1; done &&
+        if ! wp core is-installed --quiet; then
+          if [ -f "/var/www/html/data/wordpress.sql" ]; then
+            wp config create --dbname=\"$WORDPRESS_DB_NAME\" --dbuser=\"$WORDPRESS_DB_USER\" --dbpass=\"$WORDPRESS_DB_PASSWORD\" --dbhost=\"$WORDPRESS_DB_HOST\" --skip-check --quiet || true &&
+            wp db create --quiet || true &&
+            wp db import \"/var/www/html/data/wordpress.sql\" --quiet
+          fi
+        fi &&
+        wp plugin install /var/www/html/vendor/plugins/woocommerce.zip --activate --force --quiet
+      "
 
   wpcli:
     image: wordpress:cli
