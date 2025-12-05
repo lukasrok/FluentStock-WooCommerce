@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# tolerate shells lacking pipefail (fallback to -eu)
+set -euo pipefail 2>/dev/null || set -eu
 
 cd /var/www/html
 
